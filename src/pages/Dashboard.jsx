@@ -1,37 +1,48 @@
 import { Link } from 'react-router-dom'
 import StatsCard from '../components/StatsCard'
 import WeatherCard from '../components/WeatherCard'
+import CropSeasonGuide from '../components/CropSeasonGuide'
 
 export default function Dashboard() {
   return (
     <div className="fade-in">
       {/* Hero Section */}
-      <section style={{
-        padding: '6rem 2rem 5rem',
-        background: 'linear-gradient(180deg, #f0fdf4 0%, #ffffff 100%)',
+      <section className="mesh-gradient" style={{
+        padding: '8rem 2rem 6rem',
         textAlign: 'center',
         borderBottom: '1px solid var(--border)',
+        position: 'relative',
+        overflow: 'hidden'
       }}>
-        <div style={{ maxWidth: 1000, margin: '0 auto' }}>
-          <div className="badge badge-green" style={{ marginBottom: '1.5rem' }}>✨ AI-Powered Agriculture</div>
+        <div style={{
+          position: 'absolute', top: '-10%', left: '50%', transform: 'translateX(-50%)',
+          width: '100%', height: '100%',
+          background: 'radial-gradient(circle at 50% 20%, rgba(34, 197, 94, 0.05) 0%, transparent 60%)',
+          pointerEvents: 'none'
+        }} />
+
+        <div style={{ maxWidth: 1000, margin: '0 auto', position: 'relative', zIndex: 1 }}>
+          <div className="badge badge-green float-animation" style={{ marginBottom: '1.5rem', padding: '0.6rem 1.25rem' }}>
+            <span style={{ marginRight: '0.4rem' }}>⭐</span> Trusted by 15,000+ Farmers
+          </div>
           <h1 style={{
-            fontSize: 'max(2.5rem, 4vw)', fontWeight: 950, color: 'var(--text-primary)',
-            letterSpacing: '-0.04em', lineHeight: 1.1, marginBottom: '1.5rem'
+            fontSize: 'max(3rem, 5vw)', fontWeight: 950, color: 'var(--text-primary)',
+            letterSpacing: '-0.05em', lineHeight: 1.05, marginBottom: '1.75rem'
           }}>
-            Modernizing Agriculture with <span className="gradient-text">KrishiAI</span>
+            The Future of Farming is <span className="gradient-text">Intelligent</span>
           </h1>
           <p style={{
-            fontSize: '1.15rem', color: 'var(--text-secondary)',
-            maxWidth: 650, margin: '0 auto 2.5rem', lineHeight: 1.6, fontWeight: 500
+            fontSize: '1.25rem', color: 'var(--text-secondary)',
+            maxWidth: 700, margin: '0 auto 3rem', lineHeight: 1.6, fontWeight: 500
           }}>
-            Access real-time crop advice, hyper-local weather insights, and instant pest detection to maximize your yield and sustainability.
+            Empower your farm with KrishiAI's hyper-local weather alerts, pest diagnosis, and expert AI advising. Grow smarter, faster, and more sustainably.
           </p>
-          <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', flexWrap: 'wrap' }}>
-            <Link to="/advisory" className="btn btn-primary" style={{ height: 56, padding: '0 2.5rem', fontSize: '1rem', fontWeight: 700 }}>
-              Get AI Advice 🚀
+          <div style={{ display: 'flex', gap: '1.25rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+            <Link to="/advisory" className="btn btn-primary" style={{ height: 64, padding: '0 3rem', fontSize: '1.1rem', fontWeight: 700, boxShadow: '0 10px 30px -10px rgba(34, 197, 94, 0.4)' }}>
+              Start AI Consultation 🪴
             </Link>
-            <Link to="/image" className="btn btn-outline" style={{ height: 56, padding: '0 2rem', fontSize: '1rem', fontWeight: 700 }}>
-              Analyze Crop 📸
+            <Link to="/image" className="btn btn-outline" style={{ height: 64, padding: '0 2.5rem', fontSize: '1.1rem', fontWeight: 700, background: 'rgba(255,255,255,0.8)', backdropFilter: 'blur(8px)' }}>
+              Diagnose Crop 🩺
             </Link>
           </div>
         </div>
@@ -60,9 +71,12 @@ export default function Dashboard() {
                 KrishiAI monitors your micro-climate 24/7. Get specific alerts for irrigation, fertilization, and pest risks based on real-time data.
               </p>
               <WeatherCard />
+              <div style={{ marginTop: '2rem' }}>
+                <CropSeasonGuide />
+              </div>
             </div>
 
-            <div className="card" style={{ padding: '2.5rem', background: '#fff', border: '1px solid var(--border)' }}>
+            <div className="card" style={{ padding: '2.5rem', background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
               <h3 style={{ fontSize: '1.5rem', fontWeight: 800, marginBottom: '2rem', color: 'var(--text-primary)' }}>Quick Access Hub</h3>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                 {[
@@ -73,9 +87,9 @@ export default function Dashboard() {
                   <Link key={i} to={item.to} style={{
                     display: 'flex', alignItems: 'center', gap: '1.25rem', padding: '1.25rem',
                     borderRadius: 20, border: '1px solid var(--border)', textDecoration: 'none',
-                    transition: 'var(--transition)', background: '#fff'
+                    transition: 'var(--transition)', background: 'var(--bg-card)'
                   }} className="hover-glow card-hover-alt">
-                    <div style={{ width: 56, height: 56, borderRadius: 14, background: item.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.75rem' }}>
+                    <div style={{ width: 56, height: 56, borderRadius: 14, background: item.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.75rem', color: '#000' }}>
                       {item.icon}
                     </div>
                     <div>

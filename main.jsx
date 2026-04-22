@@ -6,7 +6,7 @@ import App from './App'
 import './styles/globals.css'
 
 const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY
-const IS_VALID_KEY = PUBLISHABLE_KEY && PUBLISHABLE_KEY !== 'pk_test_...'
+const IS_VALID_KEY = !!PUBLISHABLE_KEY   // ✅ FIXED
 
 if (!IS_VALID_KEY) {
   console.warn("⚠️ Clerk Publishable Key is missing or invalid. Authentication will be disabled.")

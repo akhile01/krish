@@ -11,7 +11,7 @@ const NAV_LINKS = [
 ]
 
 const CLERK_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY
-const AUTH_ENABLED = CLERK_KEY && CLERK_KEY !== 'pk_test_...'
+const AUTH_ENABLED = !!CLERK_KEY   // ✅ FIXED
 
 export default function Navbar() {
   const { user, isLoaded } = AUTH_ENABLED ? useUser() : { user: null, isLoaded: true }
@@ -106,12 +106,6 @@ export default function Navbar() {
                   />
                 </div>
               )}
-            </div>
-          )}
-
-          {!AUTH_ENABLED && (
-            <div className="badge badge-amber" style={{ fontSize: '0.75rem', fontWeight: 700, opacity: 0.8 }}>
-              🚧 Dev Mode
             </div>
           )}
 

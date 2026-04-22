@@ -1,161 +1,185 @@
 import { useState, useRef, useEffect } from 'react'
-import { auth, db } from '../firebase'
+import { db } from '../firebase'
 import { collection, doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore'
-import { useAuth } from '../context/AuthContext'
+import { useUser } from '@clerk/clerk-react'
+import { sendMessageToAI } from '../services/chatService'
+import { useToast } from '../context/ToastContext'
 
-const BOT_RESPONSES = {
-  'Suggest best paddy varieties': '🌾 For Telangana, top-performing paddy varieties include: **RNR-15048 (Telangana Sona)**, **JGL-11470 (Bathukamma)**, and **MTU-1010**. Would you like fertilizer recommendations for these?',
-  'Show today\'s weather forecast': '🌤️ **Today\'s Forecast — Hyderabad**\n🌡️ High: 34°C · Low: 24°C\n🌧️ Rainfall: 40% chance in evening\n💨 Wind: 12 km/h NE\n💡 Advisory: Avoid spraying pesticides today due to expected rain.',
-  'How to detect pests in my crop?': '🐛 To detect pests: Take a clear photo of the leaf and upload it in the **Image AI** section. Our AI will identify the issue in seconds!',
-  'What are today\'s market prices for rice?': '📈 **Rice Market Prices (Today)**\n| Mandi | Variety | Price (₹/qtl) |\n|---|---|---|\n| Nizamabad | Sona | ₹2,180 |\n| Warangal | BPT | ₹2,050 |\n| Karimnagar | HMT | ₹2,320 |',
-}
+const CLERK_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY
+const AUTH_ENABLED = CLERK_KEY && CLERK_KEY !== 'pk_test_...'
 
-const DEFAULT_RESPONSES = [
-  "🌿 That's a great question! I'm still learning, but I can help with crop advice, weather, and market prices.",
-  "👨‍🌾 Thanks for asking! Try asking about 'best crop for black soil' or 'today's tomato price'.",
-  "📚 I have info on 120+ crop varieties. What specific detail do you need?",
+const QUICK_REPLIES = [
+  'Suggest best crops 🌱',
+  'Is it going to rain? 🌦️',
+  'Check market price 📈',
+  'How to detect pests? 🐛',
 ]
 
+/**
+ * Chatbot Component
+ * A premium AI-powered chatbot for KrishiAI with Voice Assistant capabilities.
+ */
 export default function Chatbot({ isFloating = true }) {
-  const { user } = useAuth()
+  const { user } = AUTH_ENABLED ? useUser() : { user: null }
   const [messages, setMessages] = useState([
     { type: 'bot', text: "Namaste! 🙏 I'm your KrishiAI assistant. How can I help you today?" }
   ])
   const [input, setInput] = useState('')
-  const [isTyping, setIsTyping] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
+  const [isListening, setIsListening] = useState(false)
   const [isOpen, setIsOpen] = useState(false)
   const scrollRef = useRef(null)
+  const { addToast } = useToast()
 
-  useEffect(() => {
-    if (!user) return
-    const loadChat = async () => {
-      try {
-        const docRef = doc(db, 'chats', user.uid)
-        const docSnap = await getDoc(docRef)
-        if (docSnap.exists()) setMessages(docSnap.data().messages)
-      } catch (e) { console.warn('Load chat failed', e) }
+  // 🔊 Text to Speech (TTS)
+  const speak = (message) => {
+    if (!window.speechSynthesis) return
+    window.speechSynthesis.cancel()
+    const speech = new SpeechSynthesisUtterance(message)
+    speech.lang = 'en-US'
+    speech.rate = 1.0
+    window.speechSynthesis.speak(speech)
+  }
+
+  // 🎤 Speech to Text (STT)
+  const startListening = () => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+    if (!SpeechRecognition) {
+      addToast('Speech Recognition not supported 🚫', 'error')
+      return
     }
-    loadChat()
+
+    const recog = new SpeechRecognition()
+    recog.lang = 'en-US'
+    recog.onstart = () => setIsListening(true)
+    recog.onend = () => setIsListening(false)
+    recog.onresult = (e) => {
+      const transcript = e.results[0][0].transcript
+      if (transcript) handleSend(transcript, true)
+    }
+    recog.start()
+  }
+
+  // Load chat from Firestore
+  useEffect(() => {
+    if (user) {
+      const loadChat = async () => {
+        const docRef = doc(db, 'chats', user.id)
+        const d = await getDoc(docRef)
+        if (d.exists() && d.data().messages) setMessages(d.data().messages)
+      }
+      loadChat()
+    }
   }, [user])
 
+  // Save chat to Firestore
   useEffect(() => {
-    if (!user || messages.length <= 1) return
-    const saveChat = async () => {
-      try {
-        await setDoc(doc(db, 'chats', user.uid), {
-          uid: user.uid,
+    if (user && messages.length > 1) {
+      const saveChat = async () => {
+        await setDoc(doc(db, 'chats', user.id), {
+          uid: user.id,
           messages,
           updatedAt: serverTimestamp()
         })
-      } catch (e) { console.warn('Save chat failed', e) }
+      }
+      saveChat()
     }
-    const timeout = setTimeout(saveChat, 1000)
-    return () => clearTimeout(timeout)
   }, [messages, user])
 
+  // Auto-scroll
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
-  }, [messages, isTyping])
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+    }
+  }, [messages, isLoading])
 
-  const handleSend = (text = input) => {
-    if (!text.trim()) return
-    const userMsg = { type: 'user', text }
-    setMessages(prev => [...prev, userMsg])
+  const handleSend = async (text = input, fromVoice = false) => {
+    const trimmedText = text.trim()
+    if (!trimmedText || isLoading) return
+
+    setMessages(prev => [...prev, { type: 'user', text: trimmedText }])
     setInput('')
-    setIsTyping(true)
+    setIsLoading(true)
 
-    setTimeout(() => {
-      const botText = BOT_RESPONSES[text] || DEFAULT_RESPONSES[Math.floor(Math.random() * DEFAULT_RESPONSES.length)]
-      setMessages(prev => [...prev, { type: 'bot', text: botText }])
-      setIsTyping(false)
-    }, 1000)
+    try {
+      const response = await sendMessageToAI(trimmedText)
+      const botMsg = { type: 'bot', text: response.text }
+      setMessages(prev => [...prev, botMsg])
+      if (fromVoice) speak(response.text)
+    } catch (error) {
+      setMessages(prev => [...prev, { type: 'bot', text: 'Error connecting to AI server.' }])
+    } finally {
+      setIsLoading(false)
+    }
   }
 
-  const quickReplies = Object.keys(BOT_RESPONSES)
+  const toggleChat = () => setIsOpen(!isOpen)
+
+  const floatingBtn = (
+    <button onClick={toggleChat} className="hover-glow" style={{
+      position: 'fixed', bottom: 30, right: 30, width: 64, height: 64,
+      borderRadius: '50%', background: 'var(--gradient-primary)', border: 'none',
+      color: '#fff', fontSize: '1.8rem', cursor: 'pointer', zIndex: 1000,
+      boxShadow: '0 8px 25px rgba(22,163,74,0.4)', transition: '0.3s'
+    }}>
+      {isOpen ? '✕' : '💬'}
+    </button>
+  )
+
+  if (!isOpen && isFloating) return floatingBtn
 
   return (
-    <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 1000, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 16 }}>
-      {/* Chat Window */}
-      {isOpen && (
-        <div className="card" style={{
-          width: 380, height: 520, display: 'flex', flexDirection: 'column', overflow: 'hidden',
-          boxShadow: '0 20px 40px rgba(0,0,0,0.12)', border: '1px solid var(--border)',
-          background: '#ffffff', borderRadius: 24, animation: 'fadeIn 0.3s ease both',
-        }}>
-          {/* Header */}
-          <div style={{ background: 'var(--gradient-primary)', padding: '1.25rem', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{ width: 40, height: 40, background: 'rgba(255,255,255,0.2)', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem' }}>🌿</div>
-              <div>
-                <div style={{ fontWeight: 800, fontSize: '1rem' }}>KrishiAI Assistant</div>
-                <div style={{ fontSize: '0.75rem', opacity: 0.9, display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <span style={{ width: 8, height: 8, background: '#4ade80', borderRadius: '50%' }} /> Online
-                </div>
-              </div>
+    <>
+      {isFloating && floatingBtn}
+      <div style={{
+        position: isFloating ? 'fixed' : 'relative',
+        bottom: isFloating ? 110 : 0, right: isFloating ? 30 : 0,
+        width: isFloating ? 400 : '100%', height: isFloating ? 600 : '100%',
+        background: '#fff', borderRadius: 24, display: 'flex', flexDirection: 'column',
+        boxShadow: 'var(--shadow-lg)', zIndex: 1000, overflow: 'hidden',
+        border: '1px solid var(--border)', animation: 'slideUp 0.3s ease'
+      }}>
+        {/* Header */}
+        <div style={{ padding: '1.25rem', background: 'var(--gradient-primary)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: '1.5rem' }}>🤖</span>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: '0.95rem' }}>KrishiAI Assistant</div>
+              <div style={{ fontSize: '0.75rem', opacity: 0.9 }}>Online | Expert Advice</div>
             </div>
-            <button onClick={() => setIsOpen(false)} style={{ background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff', cursor: 'pointer', width: 32, height: 32, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
           </div>
+          {isFloating && <button onClick={toggleChat} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer' }}>✕</button>}
+        </div>
 
-          {/* Messages */}
-          <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-            {messages.map((m, i) => (
-              <div key={i} style={{
-                alignSelf: m.type === 'user' ? 'flex-end' : 'flex-start',
-                maxWidth: '85%', padding: '0.85rem 1.1rem', borderRadius: 18,
-                fontSize: '0.92rem', lineHeight: 1.5,
-                background: m.type === 'user' ? 'var(--primary)' : 'var(--bg-surface)',
-                color: m.type === 'user' ? '#fff' : 'var(--text-primary)',
-                border: m.type === 'user' ? 'none' : '1px solid var(--border)',
-                borderBottomRightRadius: m.type === 'user' ? 4 : 18,
-                borderBottomLeftRadius: m.type === 'user' ? 18 : 4,
-                boxShadow: m.type === 'user' ? '0 4px 12px rgba(34,197,94,0.2)' : 'none',
+        {/* Messages */}
+        <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          {messages.map((m, i) => (
+            <div key={i} style={{ alignSelf: m.type === 'user' ? 'flex-end' : 'flex-start', maxWidth: '85%' }}>
+              <div style={{
+                padding: '0.75rem 1rem', borderRadius: 16, fontSize: '0.9rem', lineHeight: 1.5,
+                background: m.type === 'user' ? 'var(--primary)' : '#f3f4f6',
+                color: m.type === 'user' ? '#fff' : '#111827',
+                borderBottomRightRadius: m.type === 'user' ? 2 : 16,
+                borderBottomLeftRadius: m.type === 'user' ? 16 : 2,
               }}>
                 {m.text}
               </div>
-            ))}
-            {isTyping && (
-              <div style={{ alignSelf: 'flex-start', padding: '0.85rem 1.1rem', borderRadius: 18, background: 'var(--bg-surface)', border: '1px solid var(--border)', display: 'flex', gap: 4 }}>
-                {[0, 1, 2].map(i => <span key={i} style={{ width: 6, height: 6, background: 'var(--text-muted)', borderRadius: '50%', animation: `blink 1.4s infinite ${i * 0.2}s` }} />)}
-              </div>
-            )}
-          </div>
+            </div>
+          ))}
+          {isLoading && <div style={{ fontStyle: 'italic', fontSize: '0.8rem', color: '#6b7280' }}>KrishiAI is thinking...</div>}
+        </div>
 
-          {/* Quick Replies */}
-          <div style={{ display: 'flex', gap: 8, overflowX: 'auto', padding: '0 1.25rem 1rem', scrollbarWidth: 'none' }}>
-            {quickReplies.map(reply => (
-              <button key={reply} onClick={() => handleSend(reply)} style={{
-                whiteSpace: 'nowrap', padding: '0.5rem 0.9rem', borderRadius: 20, fontSize: '0.75rem',
-                background: '#fff', border: '1px solid var(--primary)', color: 'var(--primary)',
-                fontWeight: 700, cursor: 'pointer', transition: 'var(--transition)'
-              }} className="hover-glow">
-                {reply}
-              </button>
-            ))}
-          </div>
-
-          {/* Input */}
-          <form onSubmit={(e) => { e.preventDefault(); handleSend() }} style={{ padding: '1rem 1.25rem 1.25rem', borderTop: '1px solid var(--border)', background: '#fff', display: 'flex', gap: 10 }}>
-            <input type="text" value={input} onChange={e => setInput(e.target.value)} placeholder="Ask anything about farming..." style={{
-              flex: 1, border: '1px solid var(--border)', borderRadius: 14, padding: '0.8rem 1.1rem', fontSize: '0.95rem', background: '#f9fafb', outline: 'none', transition: 'var(--transition)',
-            }} onFocus={e => e.target.style.borderColor = 'var(--primary)'} onBlur={e => e.target.style.borderColor = 'var(--border)'} />
-            <button type="submit" className="btn-primary" style={{ width: 48, height: 48, borderRadius: 14, border: 'none', background: 'var(--gradient-primary)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
-            </button>
+        {/* Input */}
+        <div style={{ padding: '1rem', borderTop: '1px solid var(--border)' }}>
+          <form onSubmit={e => { e.preventDefault(); handleSend() }} style={{ display: 'flex', gap: 8 }}>
+            <input type="text" value={input} onChange={e => setInput(e.target.value)} placeholder="Type a message..." style={{
+              flex: 1, border: '1px solid var(--border)', borderRadius: 20, padding: '0.6rem 1rem', outline: 'none'
+            }} />
+            <button type="button" onClick={startListening} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2rem' }}>{isListening ? '🛑' : '🎤'}</button>
+            <button type="submit" disabled={!input.trim()} style={{ background: 'var(--primary)', border: 'none', color: '#fff', borderRadius: '50%', width: 36, height: 36, cursor: 'pointer' }}>➔</button>
           </form>
         </div>
-      )}
-
-      {/* Trigger */}
-      <button onClick={() => setIsOpen(!isOpen)} style={{
-        width: 64, height: 64, borderRadius: '50%',
-        background: 'var(--gradient-primary)', color: '#fff',
-        border: 'none', cursor: 'pointer', display: 'flex',
-        alignItems: 'center', justifyContent: 'center', fontSize: '2rem',
-        boxShadow: '0 10px 20px rgba(34, 197, 94, 0.35)',
-        transition: 'var(--transition)',
-      }} className="hover-glow">
-        {isOpen ? '✕' : '🌿'}
-      </button>
-    </div>
+      </div>
+    </>
   )
 }

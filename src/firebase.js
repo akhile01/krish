@@ -1,5 +1,4 @@
 import { initializeApp } from 'firebase/app'
-import { getAuth, GoogleAuthProvider } from 'firebase/auth'
 import { getFirestore } from 'firebase/firestore'
 
 const firebaseConfig = {
@@ -11,15 +10,13 @@ const firebaseConfig = {
   appId:             import.meta.env.VITE_FIREBASE_APP_ID,
 }
 
-let app, auth, db, googleProvider
+let app, db
 
 try {
-  app            = initializeApp(firebaseConfig)
-  auth           = getAuth(app)
-  db             = getFirestore(app)
-  googleProvider = new GoogleAuthProvider()
+  app = initializeApp(firebaseConfig)
+  db  = getFirestore(app)
 } catch (e) {
   console.warn('Firebase init failed — check .env.local:', e.message)
 }
 
-export { auth, db, googleProvider }
+export { db }
