@@ -16,14 +16,15 @@ ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     {IS_VALID_KEY ? (
       <ClerkProvider publishableKey={PUBLISHABLE_KEY}>
-        <BrowserRouter basename="/krish/">
+        <BrowserRouter basename="/">
           <App />
         </BrowserRouter>
       </ClerkProvider>
     ) : (
-      <BrowserRouter basename="/krish/">
+      <BrowserRouter basename="/">
         <App />
       </BrowserRouter>
     )}
+
   </React.StrictMode>
 )
